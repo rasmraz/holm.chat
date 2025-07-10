@@ -64,7 +64,7 @@ wait_for_service() {
     print_status "Waiting for $service to be ready on port $port..."
     
     while [ $attempt -le $max_attempts ]; do
-        if netstat -tuln | grep -q ":$port "; then
+        if ss -tuln | grep -q ":$port "; then
             print_success "$service is ready!"
             return 0
         fi
@@ -102,12 +102,6 @@ main() {
         php8.2-sqlite3 \
         php8.2-xml \
         php8.2-zip \
-        php8.2-dom \
-        php8.2-fileinfo \
-        php8.2-json \
-        php8.2-openssl \
-        php8.2-pdo \
-        php8.2-tokenizer \
         libapache2-mod-php8.2 \
         > /dev/null 2>&1
     
@@ -122,6 +116,7 @@ main() {
     # Enable required Apache modules
     a2enmod rewrite > /dev/null 2>&1
     a2enmod php8.2 > /dev/null 2>&1
+    a2enmod headers > /dev/null 2>&1
     
     print_success "Apache2 installed and configured"
     
@@ -182,6 +177,9 @@ main() {
     CustomLog \${APACHE_LOG_DIR}/flarum_access.log combined
 </VirtualHost>
 EOF
+    
+    # Create the DocumentRoot directory temporarily
+    mkdir -p "$INSTALL_DIR/public"
     
     # Enable the site and disable default
     a2ensite flarum.conf > /dev/null 2>&1
