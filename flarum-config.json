@@ -1,0 +1,26 @@
+{
+  "debug": false,
+  "database": {
+    "driver": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "database": "flarum",
+    "username": "tim",
+    "password": "password123",
+    "prefix": ""
+  },
+  "url": "https://work-1-djthutkapmvgbdld.prod-runtime.all-hands.dev",
+  "settings": {
+    "forum_title": "HOLM.CHAT",
+    "forum_description": "Welcome to HOLM.CHAT - A modern discussion forum",
+    "default_locale": "en",
+    "mail_driver": "log",
+    "welcome_title": "Welcome to HOLM.CHAT"
+  },
+  "adminUser": {
+    "username": "admin",
+    "password": "admin123",
+    "password_confirmation": "admin123",
+    "email": "admin@holm.chat"
+  }
+}
