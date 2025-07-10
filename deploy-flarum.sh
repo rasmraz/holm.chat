@@ -16,8 +16,20 @@ NC='\033[0m' # No Color
 
 # Configuration Variables
 FORUM_TITLE="HOLM.CHAT"
+USE_CLOUDFLARE_TUNNEL=false
+CLOUDFLARE_TUNNEL_NAME="holm-chat-forum"
+CLOUDFLARE_CONFIG_DIR="/workspace/holm.chat/.cloudflare"
+
+# Check for cloudflare tunnel flag
+if [ "$1" = "--cloudflare" ] || [ "$2" = "--cloudflare" ]; then
+    USE_CLOUDFLARE_TUNNEL=true
+    shift # Remove the --cloudflare flag from arguments
+fi
+
 # Auto-detect the forum URL or use provided argument
-if [ -n "$1" ]; then
+if [ "$USE_CLOUDFLARE_TUNNEL" = true ]; then
+    FORUM_URL="" # Will be set after tunnel creation
+elif [ -n "$1" ]; then
     FORUM_URL="$1"
 elif [ -f "/tmp/oh-server-url" ]; then
     # Try to read from OpenHands server URL file
@@ -90,20 +102,116 @@ wait_for_service() {
     return 1
 }
 
+# Function to install Cloudflare Tunnel (cloudflared)
+install_cloudflared() {
+    print_header "Installing Cloudflare Tunnel (cloudflared)"
+    
+    # Check if already installed
+    if command -v cloudflared >/dev/null 2>&1; then
+        print_success "cloudflared is already installed"
+        return 0
+    fi
+    
+    print_status "Downloading and installing cloudflared..."
+    
+    # Download cloudflared
+    wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+    
+    # Install the package
+    dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y
+    
+    # Clean up
+    rm -f cloudflared-linux-amd64.deb
+    
+    # Verify installation
+    if command -v cloudflared >/dev/null 2>&1; then
+        print_success "cloudflared installed successfully"
+        cloudflared --version
+    else
+        print_error "Failed to install cloudflared"
+        return 1
+    fi
+}
+
+# Function to setup Cloudflare Tunnel
+setup_cloudflare_tunnel() {
+    print_header "Setting up Cloudflare Tunnel"
+    
+    # Create config directory
+    mkdir -p "$CLOUDFLARE_CONFIG_DIR"
+    
+    # Check if tunnel already exists
+    if [ -f "$CLOUDFLARE_CONFIG_DIR/tunnel.json" ]; then
+        print_status "Using existing tunnel configuration..."
+        TUNNEL_ID=$(cat "$CLOUDFLARE_CONFIG_DIR/tunnel.json" | grep -o '"TunnelID":"[^"]*"' | cut -d'"' -f4)
+        TUNNEL_URL=$(cat "$CLOUDFLARE_CONFIG_DIR/tunnel.json" | grep -o '"URL":"[^"]*"' | cut -d'"' -f4)
+        
+        if [ -n "$TUNNEL_URL" ]; then
+            FORUM_URL="$TUNNEL_URL"
+            print_success "Using existing tunnel URL: $FORUM_URL"
+            return 0
+        fi
+    fi
+    
+    print_status "Creating new Cloudflare Tunnel..."
+    
+    # For demo purposes, create a quick tunnel without authentication
+    # This creates a temporary tunnel that works immediately
+    print_status "Starting quick tunnel (no authentication required)..."
+    
+    # Start cloudflared tunnel in background
+    cloudflared tunnel --url http://localhost:12000 > /tmp/tunnel.log 2>&1 &
+    TUNNEL_PID=$!
+    
+    # Wait for tunnel to start and extract URL
+    sleep 10
+    
+    # Extract tunnel URL from logs
+    if [ -f /tmp/tunnel.log ]; then
+        TUNNEL_URL=$(grep -o 'https://[^[:space:]]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+    fi
+    
+    if [ -n "$TUNNEL_URL" ]; then
+        FORUM_URL="$TUNNEL_URL"
+        print_success "Cloudflare Tunnel URL: $FORUM_URL"
+        
+        # Save tunnel info
+        cat > "$CLOUDFLARE_CONFIG_DIR/tunnel.json" << EOF
+{
+    "TunnelID": "quick-tunnel",
+    "TunnelName": "$CLOUDFLARE_TUNNEL_NAME",
+    "URL": "$TUNNEL_URL",
+    "PID": $TUNNEL_PID,
+    "Type": "quick"
+}
+EOF
+        
+        print_status "Tunnel is running in background (PID: $TUNNEL_PID)"
+        return 0
+    else
+        print_error "Failed to create Cloudflare tunnel"
+        print_status "Check /tmp/tunnel.log for details"
+        return 1
+    fi
+}
+
 # Function to show usage
 show_usage() {
     echo -e "${BLUE}Usage:${NC}"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh${NC}                                    # Auto-detect URL"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh <URL>${NC}                              # Use specific URL"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh --cloudflare${NC}                       # Use Cloudflare Tunnel"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh --cloudflare <URL>${NC}                 # Use Cloudflare + custom URL"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh --update-url <URL>${NC}                 # Update existing installation URL"
     echo -e "  ${GREEN}bash deploy-flarum.sh --help${NC}                                  # Show this help"
     echo -e ""
     echo -e "${BLUE}Examples:${NC}"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh${NC}"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh https://your-domain.com${NC}"
-    echo -e "  ${GREEN}sudo bash deploy-flarum.sh https://work-1-abc123.prod-runtime.all-hands.dev${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh --cloudflare${NC}                       # Get free public URL!"
     echo -e "  ${GREEN}sudo bash deploy-flarum.sh --update-url https://new-domain.com${NC}"
     echo -e ""
+    echo -e "${YELLOW}🌟 Use --cloudflare for a free public URL via Cloudflare Tunnel!${NC}"
     echo -e "${YELLOW}Note: If no URL is provided, the script will try to auto-detect or use localhost:12000${NC}"
     echo ""
 }
@@ -111,6 +219,12 @@ show_usage() {
 # Main deployment function
 main() {
     print_header "HOLM.CHAT Flarum Forum Deployment"
+    
+    # Setup Cloudflare Tunnel if requested
+    if [ "$USE_CLOUDFLARE_TUNNEL" = true ]; then
+        install_cloudflared
+        setup_cloudflare_tunnel
+    fi
     
     # Show the URL being used
     print_status "Forum URL: $FORUM_URL"

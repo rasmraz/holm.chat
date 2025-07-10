@@ -1,0 +1,24 @@
+# Cloudflare Tunnel Configuration Template for HOLM.CHAT
+# This file will be automatically configured by deploy-flarum.sh
+
+tunnel: TUNNEL_ID_PLACEHOLDER
+credentials-file: CREDENTIALS_FILE_PLACEHOLDER
+
+# Ingress rules - routes traffic to your Flarum forum
+ingress:
+  # Route all traffic to the local Flarum installation
+  - hostname: "*"
+    service: http://localhost:12000
+    originRequest:
+      # Optional: Add headers for better compatibility
+      httpHostHeader: localhost:12000
+      
+  # Catch-all rule (required)
+  - service: http_status:404
+
+# Optional: Logging configuration
+# logLevel: info
+# logFile: /var/log/cloudflared.log
+
+# Optional: Metrics and health checks
+# metrics: localhost:8080
