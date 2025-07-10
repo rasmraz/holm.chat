@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  flarum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flarum
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    volumes:
+      - ./src:/var/www/html
+      - ./config/flarum/config.php:/var/www/html/config.php
+      - ./config/flarum/extensions:/var/www/html/extensions
+      - ./config/flarum/storage:/var/www/html/storage
+    environment:
+      - FLARUM_DB_HOST=mariadb
+      - FLARUM_DB_PORT=3306
+      - FLARUM_DB_NAME=flarum
+      - FLARUM_DB_USER=flarum
+      - FLARUM_DB_PASS=${DB_PASSWORD}
+      - FLARUM_ADMIN_USER=admin
+      - FLARUM_ADMIN_PASS=${ADMIN_PASSWORD}
+      - FLARUM_ADMIN_MAIL=${ADMIN_EMAIL}
+      - FLARUM_BASE_URL=https://discuss.holm.chat
+    networks:
+      - flarum-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    depends_on:
+      - flarum
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./src:/var/www/html
+    networks:
+      - flarum-network
+
+  mariadb:
+    image: mariadb:10.5
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=flarum
+      - MYSQL_USER=flarum
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - flarum-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    command: tunnel run
+    volumes:
+      - ./config/cloudflared:/etc/cloudflared
+    networks:
+      - flarum-network
+
+networks:
+  flarum-network:
+    driver: bridge
+
+volumes:
+  mariadb_data:
+    driver: local
