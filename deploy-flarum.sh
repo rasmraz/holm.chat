@@ -64,7 +64,7 @@ wait_for_service() {
     print_status "Waiting for $service to be ready on port $port..."
     
     while [ $attempt -le $max_attempts ]; do
-        if netstat -tuln | grep -q ":$port "; then
+        if ss -tuln | grep -q ":$port " || lsof -i :$port >/dev/null 2>&1; then
             print_success "$service is ready!"
             return 0
         fi
@@ -102,14 +102,7 @@ main() {
         php8.2-sqlite3 \
         php8.2-xml \
         php8.2-zip \
-        php8.2-dom \
-        php8.2-fileinfo \
-        php8.2-json \
-        php8.2-openssl \
-        php8.2-pdo \
-        php8.2-tokenizer \
-        libapache2-mod-php8.2 \
-        > /dev/null 2>&1
+        libapache2-mod-php8.2
     
     print_success "PHP 8.2 and extensions installed"
     
@@ -122,6 +115,7 @@ main() {
     # Enable required Apache modules
     a2enmod rewrite > /dev/null 2>&1
     a2enmod php8.2 > /dev/null 2>&1
+    a2enmod headers > /dev/null 2>&1
     
     print_success "Apache2 installed and configured"
     
@@ -189,8 +183,18 @@ EOF
     
     print_success "Apache virtual host configured"
     
-    # Step 7: Start Services
-    print_header "Step 7: Starting Services"
+    # Step 7: Create Installation Directory
+    print_header "Step 7: Creating Installation Directory"
+    print_status "Creating Flarum installation directory..."
+    
+    # Create installation directory structure
+    mkdir -p "$INSTALL_DIR/public"
+    chown -R www-data:www-data "$INSTALL_DIR"
+    
+    print_success "Installation directory created"
+    
+    # Step 8: Start Services
+    print_header "Step 8: Starting Services"
     print_status "Starting MariaDB..."
     service mariadb start
     wait_for_service "MariaDB" "3306"
@@ -199,8 +203,8 @@ EOF
     service apache2 start
     wait_for_service "Apache" "$WEB_PORT"
     
-    # Step 8: Setup Database
-    print_header "Step 8: Setting Up Database"
+    # Step 9: Setup Database
+    print_header "Step 9: Setting Up Database"
     print_status "Creating database and user..."
     
     # Create database
@@ -219,8 +223,8 @@ EOF
         exit 1
     fi
     
-    # Step 9: Download and Install Flarum
-    print_header "Step 9: Installing Flarum"
+    # Step 10: Download and Install Flarum
+    print_header "Step 10: Installing Flarum"
     print_status "Cloning Flarum from GitHub..."
     
     # Remove existing installation if present
@@ -237,8 +241,8 @@ EOF
     
     print_success "Flarum source code and dependencies installed"
     
-    # Step 10: Set File Permissions
-    print_header "Step 10: Setting File Permissions"
+    # Step 11: Set File Permissions
+    print_header "Step 11: Setting File Permissions"
     print_status "Configuring file permissions for web server..."
     
     # Change ownership to www-data
@@ -253,8 +257,8 @@ EOF
     
     print_success "File permissions configured"
     
-    # Step 11: Install Flarum
-    print_header "Step 11: Running Flarum Installation"
+    # Step 12: Install Flarum
+    print_header "Step 12: Running Flarum Installation"
     print_status "Creating Flarum installation configuration..."
     
     # Create installation configuration
@@ -292,8 +296,8 @@ EOF
     
     print_success "Flarum installation completed"
     
-    # Step 12: Final Configuration
-    print_header "Step 12: Final Configuration"
+    # Step 13: Final Configuration
+    print_header "Step 13: Final Configuration"
     print_status "Updating forum URL in database..."
     
     # Update base URL in database
@@ -305,8 +309,8 @@ EOF
     
     print_success "Final configuration completed"
     
-    # Step 13: Verification
-    print_header "Step 13: Verifying Installation"
+    # Step 14: Verification
+    print_header "Step 14: Verifying Installation"
     print_status "Testing forum accessibility..."
     
     # Test HTTP response
