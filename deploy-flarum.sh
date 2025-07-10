@@ -16,7 +16,21 @@ NC='\033[0m' # No Color
 
 # Configuration Variables
 FORUM_TITLE="HOLM.CHAT"
-FORUM_URL="https://work-1-djthutkapmvgbdld.prod-runtime.all-hands.dev"
+# Auto-detect the forum URL or use provided argument
+if [ -n "$1" ]; then
+    FORUM_URL="$1"
+elif [ -f "/tmp/oh-server-url" ]; then
+    # Try to read from OpenHands server URL file
+    FORUM_URL=$(cat /tmp/oh-server-url 2>/dev/null || echo "")
+    if [ -z "$FORUM_URL" ]; then
+        # Fallback: try to detect from environment or use localhost
+        FORUM_URL="http://localhost:12000"
+    fi
+else
+    # Default fallback
+    FORUM_URL="http://localhost:12000"
+fi
+
 ADMIN_USERNAME="admin"
 ADMIN_EMAIL="admin@holm.chat"
 ADMIN_PASSWORD="admin123"
@@ -76,9 +90,30 @@ wait_for_service() {
     return 1
 }
 
+# Function to show usage
+show_usage() {
+    echo -e "${BLUE}Usage:${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh${NC}                                    # Auto-detect URL"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh <URL>${NC}                              # Use specific URL"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh --update-url <URL>${NC}                 # Update existing installation URL"
+    echo -e "  ${GREEN}bash deploy-flarum.sh --help${NC}                                  # Show this help"
+    echo -e ""
+    echo -e "${BLUE}Examples:${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh https://your-domain.com${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh https://work-1-abc123.prod-runtime.all-hands.dev${NC}"
+    echo -e "  ${GREEN}sudo bash deploy-flarum.sh --update-url https://new-domain.com${NC}"
+    echo -e ""
+    echo -e "${YELLOW}Note: If no URL is provided, the script will try to auto-detect or use localhost:12000${NC}"
+    echo ""
+}
+
 # Main deployment function
 main() {
     print_header "HOLM.CHAT Flarum Forum Deployment"
+    
+    # Show the URL being used
+    print_status "Forum URL: $FORUM_URL"
     
     # Step 1: Update system packages
     print_header "Step 1: Updating System Packages"
@@ -207,12 +242,19 @@ EOF
     print_header "Step 9: Setting Up Database"
     print_status "Creating database and user..."
     
-    # Create database
-    mysql -u root -e "CREATE DATABASE IF NOT EXISTS $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+    # Set root password to empty for easier access during installation
+    mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '';" 2>/dev/null || true
+    mysql -u root -e "FLUSH PRIVILEGES;" 2>/dev/null
+    
+    # Drop and recreate database to ensure clean installation
+    mysql -u root -e "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null
+    mysql -u root -e "CREATE DATABASE $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
     
     # Create user and grant privileges
-    mysql -u root -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';" 2>/dev/null
+    mysql -u root -e "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
+    mysql -u root -e "CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';" 2>/dev/null
     mysql -u root -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';" 2>/dev/null
+    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO '$DB_USER'@'localhost';" 2>/dev/null
     mysql -u root -e "FLUSH PRIVILEGES;" 2>/dev/null
     
     # Test database connection
@@ -289,10 +331,53 @@ EOF
     
     print_status "Running Flarum installation..."
     cd "$INSTALL_DIR"
-    php flarum install --file=install-config.json
+    
+    # Set proper ownership before installation
+    chown -R www-data:www-data "$INSTALL_DIR"
+    
+    # Run installation as www-data user
+    sudo -u www-data php flarum install --file=install-config.json
     
     # Clean up installation config
     rm -f "$INSTALL_DIR/install-config.json"
+    
+    # Fix config.php with correct database credentials and URL
+    print_status "Updating configuration file..."
+    cat > "$INSTALL_DIR/config.php" << EOF
+<?php return array (
+  'debug' => false,
+  'database' => 
+  array (
+    'driver' => 'mysql',
+    'database' => '$DB_NAME',
+    'prefix' => '',
+    'prefix_indexes' => true,
+    'host' => 'localhost',
+    'port' => 3306,
+    'username' => '$DB_USER',
+    'password' => '$DB_PASSWORD',
+    'charset' => 'utf8mb4',
+    'collation' => 'utf8mb4_unicode_ci',
+    'engine' => 'InnoDB',
+    'strict' => false,
+  ),
+  'url' => '$FORUM_URL',
+  'paths' => 
+  array (
+    'api' => 'api',
+    'admin' => 'admin',
+  ),
+  'headers' => 
+  array (
+    'poweredByHeader' => true,
+    'referrerPolicy' => 'same-origin',
+  ),
+);
+EOF
+    
+    # Set proper ownership for config file
+    chown www-data:www-data "$INSTALL_DIR/config.php"
+    chmod 644 "$INSTALL_DIR/config.php"
     
     print_success "Flarum installation completed"
     
@@ -303,9 +388,21 @@ EOF
     # Update base URL in database
     mysql -u "$DB_USER" -p"$DB_PASSWORD" -e "USE $DB_NAME; INSERT INTO settings (\`key\`, \`value\`) VALUES ('base_url', '$FORUM_URL') ON DUPLICATE KEY UPDATE \`value\` = '$FORUM_URL';" 2>/dev/null
     
-    # Clear cache
+    # Clear cache and set proper permissions
     cd "$INSTALL_DIR"
-    php flarum cache:clear > /dev/null 2>&1
+    sudo -u www-data php flarum cache:clear > /dev/null 2>&1
+    
+    # Ensure storage directory is writable
+    chmod -R 775 "$INSTALL_DIR/storage"
+    chown -R www-data:www-data "$INSTALL_DIR/storage"
+    
+    # Ensure public/assets is writable
+    chmod -R 775 "$INSTALL_DIR/public/assets"
+    chown -R www-data:www-data "$INSTALL_DIR/public/assets"
+    
+    # Restart Apache to ensure all changes take effect
+    service apache2 restart || service apache2 start
+    sleep 3
     
     print_success "Final configuration completed"
     
@@ -366,12 +463,68 @@ EOF
     print_success "Deployment script completed successfully!"
 }
 
+# Function to update URL of existing installation
+update_url() {
+    local new_url="$1"
+    
+    if [ -z "$new_url" ]; then
+        print_error "Please provide a URL to update to"
+        echo "Usage: sudo bash deploy-flarum.sh --update-url <NEW_URL>"
+        exit 1
+    fi
+    
+    if [ ! -f "$INSTALL_DIR/config.php" ]; then
+        print_error "Flarum installation not found at $INSTALL_DIR"
+        exit 1
+    fi
+    
+    print_header "Updating Flarum URL"
+    print_status "Updating URL from existing installation to: $new_url"
+    
+    # Update config.php
+    sed -i "s|'url' => '.*'|'url' => '$new_url'|g" "$INSTALL_DIR/config.php"
+    
+    # Update database
+    mysql -u "$DB_USER" -p"$DB_PASSWORD" -e "USE $DB_NAME; UPDATE settings SET \`value\` = '$new_url' WHERE \`key\` = 'base_url';" 2>/dev/null
+    
+    # Clear cache
+    cd "$INSTALL_DIR"
+    sudo -u www-data php flarum cache:clear > /dev/null 2>&1 || true
+    
+    # Restart Apache
+    service apache2 restart > /dev/null 2>&1 || service apache2 start > /dev/null 2>&1
+    
+    print_success "URL updated successfully!"
+    print_status "New forum URL: $new_url"
+}
+
 # Error handling
 trap 'print_error "An error occurred during deployment. Check the output above for details."; exit 1' ERR
+
+# Check for help flag
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_usage
+    exit 0
+fi
+
+# Check for update URL flag
+if [ "$1" = "--update-url" ]; then
+    # Check if running as root
+    if [ "$EUID" -ne 0 ]; then
+        print_error "This script must be run as root (use sudo)"
+        echo ""
+        show_usage
+        exit 1
+    fi
+    update_url "$2"
+    exit 0
+fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
     print_error "This script must be run as root (use sudo)"
+    echo ""
+    show_usage
     exit 1
 fi
 
