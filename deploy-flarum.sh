@@ -544,6 +544,23 @@ EOF
     
     echo -e "${GREEN}Your HOLM.CHAT Flarum forum is now ready!${NC}\n"
     
+    # Special highlighting for Cloudflare URLs
+    if [ "$USE_CLOUDFLARE_TUNNEL" = true ]; then
+        echo -e "${YELLOW}🌟 ═══════════════════════════════════════════════════════════════${NC}"
+        echo -e "${YELLOW}🌍 YOUR FORUM IS NOW ACCESSIBLE WORLDWIDE! 🌍${NC}"
+        echo -e "${YELLOW}🌟 ═══════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${GREEN}🔗 CLICK HERE TO ACCESS YOUR FORUM:${NC}"
+        echo -e "${GREEN}   👉 $FORUM_URL 👈${NC}"
+        echo ""
+        echo -e "${BLUE}✨ This URL works from anywhere in the world!${NC}"
+        echo -e "${BLUE}✨ Share it with friends, family, or your community!${NC}"
+        echo -e "${BLUE}✨ HTTPS encryption and global CDN included for free!${NC}"
+        echo ""
+        echo -e "${YELLOW}🌟 ═══════════════════════════════════════════════════════════════${NC}"
+        echo ""
+    fi
+    
     echo -e "${BLUE}📋 ACCESS INFORMATION:${NC}"
     echo -e "   🌐 Forum URL: ${GREEN}$FORUM_URL${NC}"
     echo -e "   🌐 Local URL: ${GREEN}http://localhost:$WEB_PORT${NC}"
@@ -568,11 +585,26 @@ EOF
     echo ""
     
     echo -e "${YELLOW}🚀 NEXT STEPS:${NC}"
-    echo -e "   1. Visit the forum URL above"
-    echo -e "   2. Login with the admin credentials"
-    echo -e "   3. Customize your forum through the admin panel"
-    echo -e "   4. Start creating discussions and inviting users!"
+    if [ "$USE_CLOUDFLARE_TUNNEL" = true ]; then
+        echo -e "   1. ${GREEN}Click the Cloudflare URL above${NC} to access your forum"
+        echo -e "   2. Login with admin credentials: ${GREEN}$ADMIN_USERNAME${NC} / ${GREEN}$ADMIN_PASSWORD${NC}"
+        echo -e "   3. Share your forum URL with the world!"
+        echo -e "   4. Customize your forum through the admin panel"
+        echo -e "   5. Start creating discussions and building your community!"
+    else
+        echo -e "   1. Visit the forum URL above"
+        echo -e "   2. Login with the admin credentials"
+        echo -e "   3. Customize your forum through the admin panel"
+        echo -e "   4. Start creating discussions and inviting users!"
+    fi
     echo ""
+    
+    # Final prominent URL display for easy clicking
+    if [ "$USE_CLOUDFLARE_TUNNEL" = true ]; then
+        echo -e "${GREEN}🎯 QUICK ACCESS - CLICK TO OPEN YOUR FORUM:${NC}"
+        echo -e "${GREEN}$FORUM_URL${NC}"
+        echo ""
+    fi
     
     print_success "Deployment script completed successfully!"
 }
