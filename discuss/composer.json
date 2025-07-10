@@ -1,0 +1,51 @@
+{
+    "name": "flarum/flarum",
+    "description": "Delightfully simple forum software.",
+    "type": "project",
+    "keywords": ["forum", "discussion"],
+    "homepage": "https://flarum.org/",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Flarum",
+            "email": "info@flarum.org",
+            "homepage": "https://flarum.org/team"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/flarum/core/issues",
+        "source": "https://github.com/flarum/flarum",
+        "docs": "https://flarum.org/docs/"
+    },
+    "require": {
+        "flarum/core": "^1.8.0",
+        "flarum/approval": "^1.0.0",
+        "flarum/bbcode": "^1.0.0",
+        "flarum/emoji": "^1.0.0",
+        "flarum/lang-english": "^1.0.0",
+        "flarum/flags": "^1.0.0",
+        "flarum/likes": "^1.0.0",
+        "flarum/lock": "^1.0.0",
+        "flarum/markdown": "^1.0.0",
+        "flarum/mentions": "^1.0.0",
+        "flarum/nicknames": "^1.0.0",
+        "flarum/statistics": "^1.0.0",
+        "flarum/sticky": "^1.0.0",
+        "flarum/subscriptions": "^1.0.0",
+        "flarum/suspend": "^1.0.0",
+        "flarum/tags": "^1.0.0"
+    },
+    "config": {
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "post-install-cmd": [
+            "@php -r \"copy('composer.json', 'src/composer.json');\"",
+            "cd src && composer install --no-dev"
+        ]
+    }
+}
